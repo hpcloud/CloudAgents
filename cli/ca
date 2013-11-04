@@ -1,0 +1,459 @@
+#!/usr/bin/env python
+
+import json
+import argparse
+import urllib2
+import sys
+import os
+import re
+import socket
+
+def get_keystone_token(**args):
+	'''
+	Gets a keystone token from a keystone identity service.
+	'''
+	if 'accesskey' in args:
+		identity_request = {
+			'auth' : {
+				'apiAccessKeyCredentials' : {
+					'accessKey' : args['accesskey'],
+					'secretKey' : args['secretkey']
+				},
+				"tenantId": args['tenant_id']
+			}
+		}
+	elif 'username' in args:
+		identity_request = {
+			'auth' : {
+				'passwordCredentials' : {
+					'username' : args['username'],
+					'password' : args['password']
+				},
+				"tenantId": args['tenant_id']
+			}
+		}
+	else:
+		raise StandardError('Need username or accesskey to request token.')
+	identity_url = args['identity_url']
+	
+	if identity_url[-1] != '/':
+		identity_url += '/'
+	
+	identity_request_json = json.dumps(identity_request)
+	
+	request = urllib2.Request(identity_url+'tokens',
+		identity_request_json, {'Content-type':'application/json'})
+	try:
+		response = urllib2.urlopen(request).read()
+	except urllib2.HTTPError, e:
+		raise StandardError("HTTP Error from identity service: "+str(e))
+		
+	response_json = json.loads(response)
+	
+	return response_json['access']['token']['id']
+	
+def agent_query(**args):
+	'''
+	Make a query to the Agent API Service
+	
+	token = keystone token
+	url = agent API url
+	tenant_id = Tenant
+	
+	path = request to make
+	data = post data
+	'''
+
+	if not args['url'][-1] == "/":
+		args['url']+"/"
+	
+	url = args['url']+"tenants/"+args['tenant_id']
+
+	if args['data']:
+		if args['data'][0] == '<':
+			contenttype = "application/xml"
+		elif args['data'][0] == '{':
+			contenttype = "application/json"
+		else:
+			contenttype = "application/x-html-encoded"
+
+	if args['data']:
+		request = urllib2.Request(url+args['path'],
+		args['data'], {'X-Auth-Token':args['token'],"Content-type":contenttype})
+	else:
+		request = urllib2.Request(url+args['path'],
+		None, {'X-Auth-Token':args['token']})
+	
+	if args['method']:
+		request.get_method = lambda: args['method']
+	
+	try:
+		response = urllib2.urlopen(request)
+	except urllib2.HTTPError, e:
+		raise StandardError("HTTP Error from agent service: "+str(e))
+	if args['raw'] == True:
+		print response.read()
+		sys.exit()
+	else:
+		return response.read()
+			
+
+
+if __name__ == '__main__':
+	
+	# We roll unbuffered.
+	
+	sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+	socket._fileobject.default_bufsize = 0
+	
+	# Parse our arguments.
+	
+	parser = argparse.ArgumentParser(
+		formatter_class=argparse.RawDescriptionHelpFormatter,
+		description='''
+This script enables interaction with the Cloud Agents Service.
+
+Sample commands:
+
+List Agents:	ca agents
+Show Agent:		ca agents 1
+
+List Tasks:		ca tasks
+Show Task:		ca tasks 5
+Create Task:	ca tasks create -i < myjson.txt
+Update Task:	ca tasks create -i < myjson.txt
+Delete Task:	ca tasks delete 5
+
+List Keys:		ca accesskeys
+Create Key:		ca accesskeys create -d '{"apiAccessKeyCredentials":...}'
+Update Key:		ca accesskeys update -i < myjsonaccesskey.txt
+Delete Key:		ca accesskeys delete 2
+
+List Task Runs:	ca task_runs 5
+List Messages:	ca task_runs 5 340
+
+Show Token:		ca token
+
+Show Config:	ca config <agent url>
+
+''',
+		epilog='''
+note:
+  OS_USERNAME and OS_PASSWORD or OS_ACCESSKEY and OS_SECRETKEY must be set,
+  as well as OS_TENANT_ID, OS_IDENTITY_URL and OS_AGENTS_URL.
+	'''	)
+	parser.add_argument('arguments', metavar='arguments', type=str, nargs='+',
+		help="command")
+	parser.add_argument('-p',dest='request_pretty', action='store_true',
+		help='make the request and pretty print response')
+	parser.add_argument('-r',dest='raw_response', action='store_true',
+		help='print the raw response')
+	parser.add_argument('-i',dest='read_stdin', action='store_true',
+		help='read json data from stdin')
+	parser.add_argument('-d',dest='post_data', type=str, help="data to post")
+	args = parser.parse_args()
+	
+	# Ensure our environment variables are set.
+	
+	if (args.read_stdin):
+		data = sys.stdin.read()
+	elif (args.post_data):
+		data = args.post_data
+	else:
+		data = None
+	
+	if not os.getenv('OS_TENANT_ID'):
+		sys.exit("OS_TENANT_ID must be set.")
+	if not os.getenv('OS_AGENTS_URL'):
+		sys.exit("OS_AGENTS_URL must be set.")
+		
+		
+	if (args.arguments[0] == "agents" and len(args.arguments) == 1):
+		if os.getenv('OS_AGENTS_URL')[-1] == "/":
+			path = os.getenv('OS_AGENTS_URL')[:-1]
+		else:
+			path = os.getenv('OS_AGENTS_URL')
+		request = urllib2.Request(path+"/agents")
+		try:
+			response = urllib2.urlopen(request)
+		except urllib2.HTTPError, e:
+			raise StandardError("HTTP Error from agent service: "+str(e))
+		resp = response.read()
+		if args.raw_response:
+			print resp
+			sys.exit()
+		agents = json.loads(resp)
+		formatter = "%5s %-45s %-5s"
+		print formatter % ("ID", "Name","Ver")
+		print formatter % ("-"*5, "-"*45, "-"*5)
+		for agent in agents['agents']:
+			print formatter % (str(agent['id']), agent['name'], agent['version'])
+
+		sys.exit()
+
+	elif (args.arguments[0] == "agents" and len(args.arguments) == 2):
+		if os.getenv('OS_AGENTS_URL')[-1] == "/":
+			path = os.getenv('OS_AGENTS_URL')[:-1]
+		else:
+			path = os.getenv('OS_AGENTS_URL')
+		request = urllib2.Request(path+"/agents/"+args.arguments[1])
+		try:
+			response = urllib2.urlopen(request)
+		except urllib2.HTTPError, e:
+			raise StandardError("HTTP Error from agent service: "+str(e))
+		resp = response.read()
+		if args.raw_response:
+			print resp
+			sys.exit()
+		agent = json.loads(resp)['agent']
+		formatter = "%10s: %-45s"
+		print formatter % ("ID", str(agent['id']))
+		print formatter % ("Name", agent['name'])
+		print formatter % ("Version", agent['version'])
+		print formatter % ("Author", agent['author'])
+		print formatter % ("URL", agent['url'])
+		print formatter % ("Agent URL", agent['agent_url'])
+		print formatter % ("Help","")
+		print agent['help']
+		print ""
+		print formatter % ("Config","")
+		for field in json.loads(agent['config']):
+			print formatter % ("Name", field['name'])
+			print formatter % ("  Title", field['title'])
+			print formatter % ("  Desc", field['description'])
+			print formatter % ("  Type", field['type'])
+			print formatter % ("  RegExp", field['regexp'])
+			print formatter % ("  Required", str(field['required']))
+			if field.get('resource'):
+				print formatter % ("  Resource", field['resource'])
+
+		sys.exit()
+
+	token = get_keystone_token(username=os.getenv('OS_USERNAME'),
+		password=os.getenv('OS_PASSWORD'),
+		accesskey=os.getenv('OS_ACCESSKEY'),
+		secretkey=os.getenv('OS_SECRETKEY'),
+		tenant_id=os.getenv('OS_TENANT_ID'),
+		identity_url=os.getenv('OS_IDENTITY_URL'))
+
+	response = ""
+	if (args.arguments[0] == "token"):
+		print token
+		exit()
+	
+	elif (args.arguments[0] == "accesskeys"):
+		
+		if (len(args.arguments) == 1) or args.arguments[1] == "list":
+
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+				path="/accesskeys",tenant_id=os.getenv('OS_TENANT_ID'),
+				data=data,token=token,method="GET",raw=args.raw_response)
+
+			data = json.loads(response)
+			formatter = "%5s %40s"
+			print formatter % ("ID","Access Key")
+			print formatter % ("-"*5,"-"*40)
+			for accesskey in data['accessKeys']:
+				print formatter % (str(accesskey['id']),accesskey['accessKey'])
+			exit()
+
+		elif args.arguments[1] == "create":
+
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+				path="/accesskeys",tenant_id=os.getenv('OS_TENANT_ID'),
+				data=data,token=token,method="POST",raw=args.raw_response)
+
+		elif args.arguments[1] == "update" and len(args.arguments) > 2:
+
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+				path="/accesskeys/"+args.arguments[2],tenant_id=os.getenv('OS_TENANT_ID'),
+				data=data,token=token,method="PUT",raw=args.raw_response)
+
+		elif args.arguments[1] == "delete" and len(args.arguments) > 2:
+
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+				path="/accesskeys/"+args.arguments[2],tenant_id=os.getenv('OS_TENANT_ID'),
+				data=data,token=token,method="DELETE",raw=args.raw_response)
+				
+		elif args.arguments[1] == 'help':
+			exit("Valid commands include create, delete, and list.")			
+		else:
+			exit("Command unrecognized.  Try 'accesskeys help' for a list of commands.") 
+
+	elif (args.arguments[0] == "tasks"):
+		
+		if (len(args.arguments) == 1) or args.arguments[1] == "list":
+
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+				path="/tasks",tenant_id=os.getenv('OS_TENANT_ID'),
+				data=data,token=token,method="GET",raw=args.raw_response)
+
+			data = json.loads(response)
+			formatter = "%5s %-23s %-11s %-8s %-6s %-20s"
+			print formatter % ("ID","Name","Last Status","Interval","Run ID","Last Run")
+			print formatter % ("-"*5,"-"*23,"-"*11,"-"*8,"-"*6,"-"*20)
+			for agent in data['tasks']:
+				print formatter % (str(agent['id']),agent['name'],
+									agent['latest_task_run']['status'],
+									str(agent['interval']),
+									str(agent['latest_task_run']['id']),
+									agent['latest_task_run']['started_at'])
+			exit()
+
+		elif (len(args.arguments) == 2) and re.match("^\d+$",args.arguments[1]):
+			
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+				path="/tasks/"+args.arguments[1],tenant_id=os.getenv('OS_TENANT_ID'),
+				data=data,token=token,method="GET",raw=args.raw_response)
+			data = json.loads(response)
+			formatter = "%15s: %-45s"
+			print formatter % ("ID", str(data['id']))
+			print formatter % ("Name", data['name'])
+			print formatter % ("Interval", str(data['interval'])+" (seconds)")
+			print formatter % ("Agent URL", data['agent_url'])
+			print formatter % ("Created", data['created_at'])
+			print formatter % ("E-Mail", data['email'])
+			print formatter % ("Last Run At", data['latest_task_run']['started_at'])
+			print formatter % ("Last Status", data['latest_task_run']['status'])
+			print formatter % ("Last Run ID", data['latest_task_run']['id'])
+			print "%15s" % "Config:"
+			print json.dumps(json.loads(data['config']), indent=4)
+			exit()
+
+		elif args.arguments[1] == "create":
+
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+				path="/tasks",tenant_id=os.getenv('OS_TENANT_ID'),
+				data=data,token=token,method="POST",raw=args.raw_response)
+
+		elif args.arguments[1] == "update" and len(args.arguments) > 2:
+
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+				path="/tasks/"+args.arguments[2],tenant_id=os.getenv('OS_TENANT_ID'),
+				data=data,token=token,method="PUT",raw=args.raw_response)
+
+		elif args.arguments[1] == "delete" and len(args.arguments) > 2:
+
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+				path="/tasks/"+args.arguments[2],tenant_id=os.getenv('OS_TENANT_ID'),
+				data=data,token=token,method="DELETE",raw=args.raw_response)
+				
+		elif args.arguments[1] == 'help':
+			exit("Valid commands include create, delete, and list.")			
+		else:
+			exit("Command unrecognized.  Try 'tasks help' for a list of commands.") 
+			
+	elif (args.arguments[0] == "watch"):
+		
+		if (len(args.arguments) == 3) and re.match("^\d+$",args.arguments[1]):
+
+			
+			request = urllib2.Request(os.getenv('OS_AGENTS_URL')+
+			"tenants/"+os.getenv('OS_TENANT_ID')+"/tasks/"+args.arguments[1]+"/runs/"+args.arguments[2]+"/stream",
+			None, {'X-Auth-Token':token})
+			
+			try:
+				response = urllib2.urlopen(request)
+			except urllib2.HTTPError, e:
+				raise StandardError("HTTP Error from agent service: "+str(e))
+			if not args.raw_response:
+				response.fp._rbufsize = 0
+				formatter = "%-50s %4s %20s"
+				print formatter % ("Title / Message","%","Time")
+				print formatter % ("-"*50,"-"*4,"-"*20)
+			for line in iter(response.readline, ''):
+				if args.raw_response:
+					print line
+				else:
+					line_json = None
+					try:
+						line_json = json.loads(line)
+					except ValueError:
+						pass
+					if line_json:
+						print formatter % (line_json['title'],line_json['percent'],line_json['created_at'])
+						if line_json['message']:
+							print line_json['message']
+
+			exit()
+
+	elif (args.arguments[0] == "task_runs"):
+		
+		if (len(args.arguments) == 2) and re.match("^\d+$",args.arguments[1]):
+
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+				path="/tasks/"+args.arguments[1]+"/runs",tenant_id=os.getenv('OS_TENANT_ID'),
+				data=data,token=token,method="GET",raw=args.raw_response)
+			data = json.loads(response)
+			formatter = "%5s %-15s %-30s"
+			print formatter % ("ID","Last Status","Started")
+			print formatter % ("-"*5,"-"*15,"-"*30)
+			for task_run in data['task_runs']:
+				print formatter % (str(task_run['id']),task_run['status'],task_run['started_at'])
+			exit()
+
+		elif (len(args.arguments) == 3) and re.match("^\d+$",args.arguments[2]):
+			
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+					path="/tasks/"+args.arguments[1]+"/runs/"+args.arguments[2]+"/messages/",
+					tenant_id=os.getenv('OS_TENANT_ID'),
+					data=data,
+					token=token,
+					method="GET",
+					raw=args.raw_response)
+			data = json.loads(response)
+			formatter = "%5s %-40s %-20s"
+			print formatter % ("ID","Title","At")
+			print formatter % ("-"*5,"-"*40,"-"*20)
+			for message in data['messages']:
+				print formatter % (str(message['id']),message['title'],message['created_at'])
+				if message['message']:
+					print message['message']
+			exit()
+
+
+		elif args.arguments[1] == 'help':
+			exit("Example: ca task_runs 1 4  (task_id=1, task_run_id=4)")			
+		else:
+			exit("Command unrecognized.  Try 'task_runs help' for a list of commands.") 
+
+	elif (args.arguments[0] == "config"):
+		
+		if (len(args.arguments) == 2):
+
+			json_req = {"agent_url": args.arguments[1]}
+			
+			response = agent_query(url=os.getenv('OS_AGENTS_URL'),
+				path="/task_configuration",tenant_id=os.getenv('OS_TENANT_ID'),
+				data=json.dumps(json_req),token=token,method="POST",raw=args.raw_response)
+			config = json.loads(response)
+			formatter = "%-10s: %-45s"
+			if config.get('config'):
+				print formatter % ("Name", config['name'])
+				print formatter % ("Version", config['version'])
+				print formatter % ("Author", config['author'])
+				print formatter % ("URL", config['url'])
+				print ""
+				print config['help']
+				print ""
+				for field in config['config']:
+					print formatter % ("Name", field['name'])
+					print formatter % ("  Title", field['title'])
+					print formatter % ("  Desc", field['description'])
+					print formatter % ("  Type", field['type'])
+					print formatter % ("  RegExp", field['regexp'])
+					print formatter % ("  Required", str(field['required']))
+				
+				exit()
+			if config.get('message'):
+				print exit(config['message'])
+
+	if args.request_pretty:
+		print json.dumps(json.loads(response), indent=4)
+	else:
+		print response
+	
+	
+	
+	
+	

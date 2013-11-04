@@ -1,0 +1,9 @@
+CA Alert from ${TASK_NAME}
+
+${BODY}
+
+This message was sent from:
+Task ID: ${TASK_ID}
+Task Run ID: ${TASK_RUN_ID}
+API URL: ${CA_URL}
+To: ${EMAIL_ADDRESS}

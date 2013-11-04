@@ -1,0 +1,1 @@
+This is where jQuery form validator goes.

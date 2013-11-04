@@ -1,0 +1,35 @@
+# This file configures the fabric deployer for our install.
+
+# Keys are paths to the SSH pem for the server.
+
+# Servers should be a comma separated list of server names.  No spaces.
+
+[Deploy]
+
+local_path = *deploy_local_path*
+
+api_servers = *deploy_api_servers*
+api_server_username = *deploy_api_server_username*
+api_key = *deploy_api_key*
+api_remote_path = *deploy_api_remote_path*
+
+dispatch_servers = *deploy_dispatch_servers*
+dispatch_server_username = *deploy_dispatch_server_username*
+dispatch_key = *deploy_dispatch_key*
+dispatch_remote_path = *deploy_dispatch_remote_path*
+
+crypt_servers = *deploy_crypt_servers*
+crypt_server_username = *deploy_crypt_server_username*
+crypt_key = *deploy_crypt_key*
+crypt_remote_path = *deploy_crypt_remote_path*
+
+web_servers = *deploy_web_servers*
+web_server_username = *deploy_web_server_username*
+web_key = *deploy_web_key*
+web_remote_path = *deploy_web_remote_path*
+
+exe_servers = *deploy_exe_servers*
+exe_server_username = *deploy_exe_server_username*
+exe_key = *deploy_exe_key*
+exe_remote_path = *deploy_exe_remote_path*
+

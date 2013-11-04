@@ -1,0 +1,67 @@
+To get the dev environment up and running on an HP Cloud VM or a local guest VM, first spin up a new Ubuntu 12.04 VM.  Once it's up, SSH in, and walk through the following:
+
+Clone CloudAgents into your ubuntu home directory.  Something like:
+
+# sudo apt-get -y install git unzip
+# git clone https://github.com/HPCloud/CloudAgents.git
+
+Go ahead and grab our web dependencies:
+
+(Cut and paste all this.)
+
+wget https://github.com/twbs/bootstrap/archive/v2.3.1.zip
+unzip v2.3.1.zip
+mv bootstrap-2.3.1/docs/assets/css CloudAgents/web/public/bootstrap/
+mv bootstrap-2.3.1/js CloudAgents/web/public/bootstrap/
+mv bootstrap-2.3.1/img CloudAgents/web/public/bootstrap/
+wget http://jquery.bassistance.de/validate/jquery-validation-1.11.1.zip
+unzip jquery-validation-1.11.1.zip -d jquery-validation
+mv jquery-validation/dist/jquery.validate.min.js CloudAgents/web/public/js/
+mv jquery-validation/dist/additional-methods.min.js CloudAgents/web/public/js/
+wget http://code.jquery.com/jquery-1.10.2.min.js
+wget http://code.jquery.com/jquery-1.10.2.min.map
+mv jquery-1.10.2.min.js CloudAgents/web/public/bootstrap/js/jquery.js
+mv jquery-1.10.2.min.map CloudAgents/web/public/bootstrap/js/jquery-1.10.2.min.map
+
+
+Run the single VM installer, this will install almost all of our dependencies, and will take a while:
+
+# cd CloudAgents
+# python ca-install.py ubuntu
+
+Now startup the individual services (you may want to do this in screen instead, so you can kill and restart them easily):
+
+# python ca-api.py &> ca-api.log &
+# python ca-crypt.py &> ca-crypt.log &
+# python ca-dispatch.py &> ca-dispatch.log &
+# python ca-runner.py &> ca-runner.log &
+
+And populate the agents table with our sample agents:
+
+# python ca-populate-agents.py -D agents/
+
+Now would be a good time to make sure that your VM's security groups or network configuration allow access to port 8000 for this VM.  You can do that in the cloud management console, if you're using an HP Cloud VM.
+
+Now edit the configuration for the sample web UI to bind to our external IP:
+
+# cd web
+
+Grab the external ip from eth0:
+
+# ifconfig eth0
+
+And change the bind_address config in ca-web.cfg to match.
+
+# nano ca-web.cfg
+
+Then, run the web interface:
+
+# python ca-web.py &> ca-web.log &
+
+You should now be able to access the web UI in your browser at your VM's external IP, on port 8000.  Local to the machine, you can poke the API directly on port 8080.
+
+Login with the same username and password you use to login to the HP Cloud management console.  By default Cloud Agents points to HP Cloud, but you could reconfigure it to point to another OpenStack install by tweaking the ca.cfg file.
+
+Once you've logged in, you'll need to store access keys so the system can operate on your behalf.  Once that's done, you should be able to click on the 'Agents' tab at the top, and start poking around at the various pre-built agents we've included.
+
+Have fun!

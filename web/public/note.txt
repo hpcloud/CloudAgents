@@ -1,0 +1,64 @@
+# This directory needs Twitter Bootstrap downloaded into it in order 
+# for the UI to be pretty.
+
+# You'll need the css, fonts and js from Bootstrap in a 'bootstrap' folder.
+# https://github.com/twbs/bootstrap
+# You'll also need jquery.js in the js subfolder.
+
+# In the js folder you'll need jquery's additional-methods.min.js and
+# jquery.validate.min.js from https://github.com/jzaefferer/jquery-validation
+#
+
+# Something like this should work:
+
+cd ~
+wget https://github.com/twbs/bootstrap/archive/v2.3.1.zip
+unzip v2.3.1.zip
+mv bootstrap-2.3.1/docs/assets/css CloudAgents/web/public/bootstrap/
+mv bootstrap-2.3.1/js CloudAgents/web/public/bootstrap/
+mv bootstrap-2.3.1/img CloudAgents/web/public/bootstrap/
+wget http://jquery.bassistance.de/validate/jquery-validation-1.11.1.zip
+unzip jquery-validation-1.11.1.zip -d jquery-validation
+mv jquery-validation/dist/jquery.validate.min.js CloudAgents/web/public/js/
+mv jquery-validation/dist/additional-methods.min.js CloudAgents/web/public/js/
+wget http://code.jquery.com/jquery-1.10.2.min.js
+wget http://code.jquery.com/jquery-1.10.2.min.map
+mv jquery-1.10.2.min.js CloudAgents/web/public/bootstrap/js/jquery.js
+mv jquery-1.10.2.min.map CloudAgents/web/public/bootstrap/js/jquery-1.10.2.min.map
+
+
+
+# When you're done, the directory should look like this:
+#
+#
+# ./bootstrap/css:
+# bootstrap-responsive.css
+# bootstrap-responsive.min.css
+# bootstrap.css
+# bootstrap.min.css
+
+# ./bootstrap/fonts:
+# glyphicons-halflings-regular.eot
+# glyphicons-halflings-regular.svg
+# glyphicons-halflings-regular.ttf
+# glyphicons-halflings-regular.woff
+
+# ./bootstrap/js:
+affix.js
+alert.js
+bootstrap.js
+bootstrap.min.js
+button.js
+carousel.js
+collapse.js
+dropdown.js
+modal.js
+popover.js
+scrollspy.js
+tab.js
+tooltip.js
+transition.js
+
+# ./js:
+# additional-methods.min.js
+# jquery.validate.min.js
